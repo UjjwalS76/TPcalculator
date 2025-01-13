@@ -1,8 +1,9 @@
+# main.py
+
 import streamlit as st
+import google.generativeai as genai
 from typing import Dict, Any
 import json
-from langchain.chat_models import ChatOpenAI
-from langchain.prompts import PromptTemplate
 
 # Configure page settings
 st.set_page_config(
@@ -11,68 +12,61 @@ st.set_page_config(
     layout="wide"
 )
 
-# Load API key from Streamlit secrets
-api_key = st.secrets.get("GOOGLE_API_KEY")
-if not api_key:
-    st.error("Google API key is missing. Please set it in Streamlit Secrets.")
-    st.stop()
+# Initialize Gemini API
+api_key = st.secrets["GOOGLE_API_KEY"]
+genai.configure(api_key=api_key)
 
-# Initialize LangChain with Gemini model (or equivalent)
 def get_model():
-    return ChatOpenAI(model="gemini-1.5-flash", temperature=0, openai_api_key=api_key)
+    return genai.GenerativeModel(model_name='gemini-1.5-flash')
 
-# Function to calculate transfer pricing
 def calculate_transfer_price(data: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Calculate transfer pricing using the Gemini model.
+    Calculate transfer pricing using Gemini model
     """
-    prompt_template = PromptTemplate(
-        input_variables=["parent_company", "subsidiary", "transaction_type", "transaction_value", "market_conditions"],
-        template="""
-        Please analyze the following transfer pricing scenario and provide calculations:
+    prompt = f"""
+    Please analyze the following transfer pricing scenario and provide calculations:
 
-        Company Details:
-        - Parent Company: {parent_company}
-        - Subsidiary: {subsidiary}
-        - Transaction Type: {transaction_type}
-        - Transaction Value: {transaction_value}
-        - Market Conditions: {market_conditions}
+    Company Details:
+    - Parent Company: {data['parent_company']}
+    - Subsidiary: {data['subsidiary']}
+    - Transaction Type: {data['transaction_type']}
+    - Transaction Value: {data['transaction_value']}
+    - Market Conditions: {data['market_conditions']}
 
-        Please provide:
-        1. Recommended transfer price range
-        2. Markup percentage
-        3. Key considerations
-        4. Compliance notes
+    Please provide:
+    1. Recommended transfer price range
+    2. Markup percentage
+    3. Key considerations
+    4. Compliance notes
 
-        Return the response strictly as a JSON with these exact keys:
-        {{
-            "price_range": "recommended price range as string",
-            "markup_percentage": "markup percentage as string",
-            "considerations": "key considerations as string",
-            "compliance_notes": "compliance notes as string"
-        }}
-        """
-    )
-    
-    # Generate response using LangChain model
+    Return the response strictly as a JSON with these exact keys:
+    {{
+        "price_range": "recommended price range as string",
+        "markup_percentage": "markup percentage as string",
+        "considerations": "key considerations as string",
+        "compliance_notes": "compliance notes as string"
+    }}
+    """
+
     try:
         model = get_model()
-        prompt = prompt_template.format(**data)
-        response = model.predict(prompt)
-        
-        # Parse JSON response
-        result = json.loads(response)
+        response = model.generate_content(prompt)
+        # Extract the JSON string from the response
+        response_text = response.text.strip()
+        result = json.loads(response_text)
         return result
+    except json.JSONDecodeError as e:
+        st.error(f"JSON decoding error: {str(e)}")
+        st.error(f"Response text: {response_text}")
+        return None
     except Exception as e:
         st.error(f"Error in calculation: {str(e)}")
         return None
 
-# Main function for Streamlit app
 def main():
     st.title("Transfer Pricing Calculator")
-    st.write("Calculate appropriate transfer prices for intercompany transactions.")
+    st.write("Calculate appropriate transfer prices for intercompany transactions")
 
-    # Input form for user data
     with st.form("transfer_pricing_form"):
         col1, col2 = st.columns(2)
 
@@ -92,7 +86,7 @@ def main():
 
     if submit_button:
         if not all([parent_company, subsidiary, transaction_value]):
-            st.warning("Please fill in all required fields.")
+            st.warning("Please fill in all required fields")
             return
 
         input_data = {
@@ -107,7 +101,6 @@ def main():
             result = calculate_transfer_price(input_data)
 
         if result:
-            # Display results in metric format
             st.subheader("Results")
             col1, col2 = st.columns(2)
 
@@ -119,13 +112,12 @@ def main():
                 st.subheader("Key Considerations")
                 st.write(result["considerations"])
 
-                st.subheader("Compliance Notes")
-                st.write(result["compliance_notes"])
+            st.subheader("Compliance Notes")
+            st.write(result["compliance_notes"])
 
-            # Download button for JSON report
             st.download_button(
-                label="Download Report",
-                data=json.dumps(result, indent=2),
+                "Download Report",
+                json.dumps(result, indent=2),
                 file_name="transfer_pricing_report.json",
                 mime="application/json"
             )
