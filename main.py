@@ -1,8 +1,8 @@
 # main.py
 import streamlit as st
-from langchain_core.prompts import PromptTemplate
-from langchain_core.output_parsers import JsonOutputParser
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain.prompts import PromptTemplate
+from langchain.chains import LLMChain
+from langchain.chat_models import ChatGoogleGenerativeAI
 from typing import Dict, Any
 import json
 
@@ -18,8 +18,7 @@ def get_llm():
     return ChatGoogleGenerativeAI(
         model="gemini-1.5-flash",
         google_api_key=st.secrets["GOOGLE_API_KEY"],
-        temperature=0.1,
-        convert_system_message_to_human=True
+        temperature=0.1
     )
 
 # Create prompt template
@@ -59,16 +58,17 @@ def calculate_transfer_price(data: Dict[str, Any]) -> Dict[str, Any]:
     """
     try:
         llm = get_llm()
-        formatted_prompt = prompt.format(
+        chain = LLMChain(llm=llm, prompt=prompt)
+        
+        response = chain.run(
             parent_company=data['parent_company'],
             subsidiary=data['subsidiary'],
             transaction_type=data['transaction_type'],
             transaction_value=data['transaction_value'],
             market_conditions=data['market_conditions']
         )
-        response = llm.invoke(formatted_prompt)
         # Extract the JSON string from the response
-        result = json.loads(response.content)
+        result = json.loads(response)
         return result
     except Exception as e:
         st.error(f"Error in calculation: {str(e)}")
