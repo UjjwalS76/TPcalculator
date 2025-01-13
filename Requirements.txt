@@ -1,3 +1,4 @@
 streamlit==1.32.0
-langchain==0.1.11
-langchain-google-genai==0.1.1
+langchain==0.0.304  # Ensure compatibility with your LangChain version
+google-generativeai==0.3.2  # Required for Gemini API integration
+openai==0.27.10  # For LangChain's OpenAI wrapper (used for Gemini)
