@@ -1,6 +1,8 @@
 # main.py
 import streamlit as st
-import google.generativeai as genai
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain.prompts import PromptTemplate
+from langchain.chains import LLMChain
 from typing import Dict, Any
 import json
 
@@ -11,41 +13,59 @@ st.set_page_config(
     layout="wide"
 )
 
-# Initialize Gemini API
-api_key = st.secrets["GOOGLE_API_KEY"]
-genai.configure(api_key=api_key)
-model = genai.GenerativeModel('gemini-1.5-flash')
+# Initialize Gemini model with Langchain
+llm = ChatGoogleGenerativeAI(
+    model="gemini-1.5-flash",
+    google_api_key=st.secrets["GOOGLE_API_KEY"],
+    temperature=0.1,
+    convert_system_message_to_human=True
+)
+
+# Create prompt template
+transfer_pricing_template = """
+Please analyze the following transfer pricing scenario and provide calculations:
+
+Company Details:
+- Parent Company: {parent_company}
+- Subsidiary: {subsidiary}
+- Transaction Type: {transaction_type}
+- Transaction Value: {transaction_value}
+- Market Conditions: {market_conditions}
+
+Please provide:
+1. Recommended transfer price range
+2. Markup percentage
+3. Key considerations
+4. Compliance notes
+
+Format the response as a JSON with these keys:
+- price_range
+- markup_percentage
+- considerations
+- compliance_notes
+"""
+
+prompt = PromptTemplate(
+    input_variables=["parent_company", "subsidiary", "transaction_type", "transaction_value", "market_conditions"],
+    template=transfer_pricing_template
+)
+
+# Create LLMChain
+chain = LLMChain(llm=llm, prompt=prompt)
 
 def calculate_transfer_price(data: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Calculate transfer pricing using Gemini model
+    Calculate transfer pricing using Langchain and Gemini model
     """
-    prompt = f"""
-    Please analyze the following transfer pricing scenario and provide calculations:
-    
-    Company Details:
-    - Parent Company: {data['parent_company']}
-    - Subsidiary: {data['subsidiary']}
-    - Transaction Type: {data['transaction_type']}
-    - Transaction Value: {data['transaction_value']}
-    - Market Conditions: {data['market_conditions']}
-    
-    Please provide:
-    1. Recommended transfer price range
-    2. Markup percentage
-    3. Key considerations
-    4. Compliance notes
-    
-    Format the response as a JSON with these keys:
-    - price_range
-    - markup_percentage
-    - considerations
-    - compliance_notes
-    """
-    
     try:
-        response = model.generate_content(prompt)
-        result = json.loads(response.text)
+        response = chain.run(
+            parent_company=data['parent_company'],
+            subsidiary=data['subsidiary'],
+            transaction_type=data['transaction_type'],
+            transaction_value=data['transaction_value'],
+            market_conditions=data['market_conditions']
+        )
+        result = json.loads(response)
         return result
     except Exception as e:
         st.error(f"Error in calculation: {str(e)}")
@@ -85,7 +105,8 @@ def main():
                 "market_conditions": market_conditions
             }
             
-            result = calculate_transfer_price(input_data)
+            with st.spinner("Calculating transfer pricing..."):
+                result = calculate_transfer_price(input_data)
             
             if result:
                 st.subheader("Results")
